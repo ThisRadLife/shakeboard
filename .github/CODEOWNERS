@@ -1,0 +1,10 @@
+* @ThisRadLife
+
+/Sources/ShakeBoard/AIBridge.swift @ThisRadLife
+/Sources/ShakeBoard/AIAccess.swift @ThisRadLife
+/Sources/ShakeBoard/AIRedactor.swift @ThisRadLife
+/Sources/Shared/ @ThisRadLife
+/Sources/ShakeBoardMCP/ @ThisRadLife
+/Sources/ShakeBoardShare/ @ThisRadLife
+/.github/workflows/ @ThisRadLife
+/Project.swift @ThisRadLife

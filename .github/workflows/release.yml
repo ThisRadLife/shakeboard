@@ -1,0 +1,236 @@
+# Never trigger this workflow on pull_request or pull_request_target. Signing and notarization secrets
+# live only in the protected "release" environment.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    environment: release
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the tag to point at master
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || { echo "Tag $GITHUB_REF_NAME is not on master" >&2; exit 1; }
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: "26.6"
+
+      - name: Install Tuist
+        env:
+          TUIST_VERSION: "4.202.0"
+          TUIST_SHA256: 3f73600dbc0d12077c0f61c8a472ef7ffdda54a7c44391f462d2306f34a5fab7
+        run: |
+          set -euo pipefail
+          TUIST_DIR="$RUNNER_TEMP/tuist"
+          TUIST_ZIP="$RUNNER_TEMP/tuist.zip"
+          curl -fsSL "https://github.com/tuist/tuist/releases/download/${TUIST_VERSION}/tuist.zip" -o "$TUIST_ZIP"
+          echo "${TUIST_SHA256}  ${TUIST_ZIP}" | shasum -a 256 -c -
+          mkdir -p "$TUIST_DIR"
+          unzip -q "$TUIST_ZIP" -d "$TUIST_DIR"
+          echo "$TUIST_DIR" >> "$GITHUB_PATH"
+          export PATH="$TUIST_DIR:$PATH"
+          tuist version
+
+      - name: Generate project
+        run: tuist generate --no-open
+
+      - name: Import signing and notarization credentials
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/shakeboard-release.keychain-db"
+          KEYCHAIN_PASSWORD_FILE="$RUNNER_TEMP/shakeboard-keychain-password"
+          P12_PATH="$RUNNER_TEMP/shakeboard-developer-id.p12"
+          ASC_KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          LOGIN_KEYCHAIN="$(security default-keychain -d user | tr -d '"')"
+
+          umask 077
+          openssl rand -base64 32 > "$KEYCHAIN_PASSWORD_FILE"
+          printf '%s' "$DEVELOPER_ID_P12_BASE64" | /usr/bin/base64 -D > "$P12_PATH"
+          printf '%s' "$ASC_KEY_P8_BASE64" | /usr/bin/base64 -D > "$ASC_KEY_PATH"
+
+          security create-keychain -p "$(<"$KEYCHAIN_PASSWORD_FILE")" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$(<"$KEYCHAIN_PASSWORD_FILE")" "$KEYCHAIN_PATH"
+          security import "$P12_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$DEVELOPER_ID_P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$(<"$KEYCHAIN_PASSWORD_FILE")" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$LOGIN_KEYCHAIN"
+
+      - name: Build, notarize, and package
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          EXPECTED_TEAM_ID: DQ9FW5YXUQ
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/shakeboard-release.keychain-db"
+          ASC_KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          APP_PATH="/tmp/shakeboard-release/Build/Products/Release/ShakeBoard.app"
+          APP_ZIP="$RUNNER_TEMP/ShakeBoard-notarization.zip"
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_NAME="ShakeBoard-${VERSION}.dmg"
+          SHA_NAME="$DMG_NAME.sha256"
+          DMG_PATH="$GITHUB_WORKSPACE/$DMG_NAME"
+          DMG_ROOT="$(mktemp -d "$RUNNER_TEMP/shakeboard-dmg.XXXXXX")"
+
+          xcodebuild \
+            -workspace ShakeBoard.xcworkspace \
+            -scheme ShakeBoard \
+            -configuration Release \
+            -derivedDataPath /tmp/shakeboard-release \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH --timestamp" \
+            build
+
+          APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
+          if [[ "$APP_VERSION" != "$VERSION" ]]; then
+            echo "Built app version $APP_VERSION does not match tag version $VERSION" >&2
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          shopt -s nullglob
+          APPEX_PATHS=("$APP_PATH"/Contents/PlugIns/*.appex)
+          if (( ${#APPEX_PATHS[@]} == 0 )); then
+            echo "No .appex found in $APP_PATH/Contents/PlugIns" >&2
+            exit 1
+          fi
+          SHARE_APPEX="$APP_PATH/Contents/PlugIns/ShakeBoardShare.appex"
+          if [[ ! -d "$SHARE_APPEX" ]]; then
+            echo "Missing share extension: $SHARE_APPEX" >&2
+            exit 1
+          fi
+          SIGNED_PATHS=(
+            "$APP_PATH"
+            "$APP_PATH/Contents/MacOS/shakeboard-mcp"
+            "${APPEX_PATHS[@]}"
+          )
+          for SIGNED_PATH in "${SIGNED_PATHS[@]}"; do
+            SIGNATURE_DETAILS="$(codesign -dvv "$SIGNED_PATH" 2>&1)"
+            TIMESTAMP_LINE="$(grep '^Timestamp=' <<< "$SIGNATURE_DETAILS" || true)"
+            if [[ -z "$TIMESTAMP_LINE" ]]; then
+              echo "Missing secure timestamp: $SIGNED_PATH" >&2
+              exit 1
+            fi
+            echo "Secure timestamp for $SIGNED_PATH:"
+            printf '%s\n' "$TIMESTAMP_LINE"
+          done
+          for SIGNED_PATH in "${SIGNED_PATHS[@]}"; do
+            ENTITLEMENTS_PLIST="$(mktemp "$RUNNER_TEMP/shakeboard-entitlements.XXXXXX")"
+            if ! codesign -d --entitlements :"$ENTITLEMENTS_PLIST" "$SIGNED_PATH"; then
+              echo "Could not export entitlements: $SIGNED_PATH" >&2
+              exit 1
+            fi
+            if [[ -s "$ENTITLEMENTS_PLIST" ]]; then
+              plutil -lint "$ENTITLEMENTS_PLIST"
+              if GET_TASK_ALLOW="$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$ENTITLEMENTS_PLIST" 2>/dev/null)" \
+                && [[ "$GET_TASK_ALLOW" == "true" ]]; then
+                echo "Release binary contains get-task-allow: $SIGNED_PATH" >&2
+                exit 1
+              fi
+            fi
+            if [[ "$SIGNED_PATH" == "$SHARE_APPEX" ]]; then
+              if ! APP_SANDBOX="$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.app-sandbox" "$ENTITLEMENTS_PLIST" 2>/dev/null)" \
+                || [[ "$APP_SANDBOX" != "true" ]]; then
+                echo "ShakeBoardShare.appex is missing app sandbox entitlement" >&2
+                exit 1
+              fi
+            fi
+            rm -f "$ENTITLEMENTS_PLIST"
+          done
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -F "TeamIdentifier=$EXPECTED_TEAM_ID"
+
+          ditto -c -k --keepParent "$APP_PATH" "$APP_ZIP"
+          xcrun notarytool submit "$APP_ZIP" \
+            --key "$ASC_KEY_PATH" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+
+          ditto "$APP_PATH" "$DMG_ROOT/ShakeBoard.app"
+          ln -s /Applications "$DMG_ROOT/Applications"
+          hdiutil create \
+            -volname "ShakeBoard" \
+            -srcfolder "$DMG_ROOT" \
+            -ov \
+            -format UDZO \
+            "$DMG_PATH"
+          codesign --force \
+            --timestamp \
+            --sign "Developer ID Application" \
+            --keychain "$KEYCHAIN_PATH" \
+            "$DMG_PATH"
+          codesign --verify --strict --verbose=2 "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" \
+            --key "$ASC_KEY_PATH" \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+          (
+            cd "$GITHUB_WORKSPACE"
+            shasum -a 256 "$DMG_NAME" > "$SHA_NAME"
+          )
+
+          rm -rf "$DMG_ROOT"
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_PATH="$GITHUB_WORKSPACE/ShakeBoard-${VERSION}.dmg"
+          SHA_PATH="$DMG_PATH.sha256"
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --draft \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "$DMG_PATH" \
+            "$SHA_PATH"
+
+      - name: Clean up signing material
+        if: always()
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/shakeboard-release.keychain-db"
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm -f \
+            "$RUNNER_TEMP/shakeboard-keychain-password" \
+            "$RUNNER_TEMP/shakeboard-developer-id.p12" \
+            "$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8" \
+            "$RUNNER_TEMP/ShakeBoard-notarization.zip"

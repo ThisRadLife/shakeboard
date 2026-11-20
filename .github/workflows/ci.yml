@@ -1,0 +1,73 @@
+# Toolchain note: Tuist 4.202.0 is pinned and must be bumped together with Xcode. Its
+# ProjectDescription.framework is compiled with the Swift version used to build that Tuist release,
+# so the runner's Xcode must be NEWER than or equal to that -- an
+# older pinned Xcode cannot load it. The first run of this workflow pinned Xcode 16.2 and failed with
+# "failed to build module 'ProjectDescription' ... SDK built with Apple Swift 6.2, compiler is 6.0.3"
+# because brew installed Tuist 4.202.6 (Swift 6.2 / Xcode 26).
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # 26.6 matches the Xcode ShakeBoard is developed on, and is present on the macos-26 image.
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.6"
+
+      - name: Install Tuist
+        env:
+          TUIST_VERSION: "4.202.0"
+          TUIST_SHA256: 3f73600dbc0d12077c0f61c8a472ef7ffdda54a7c44391f462d2306f34a5fab7
+        run: |
+          set -euo pipefail
+          TUIST_DIR="$RUNNER_TEMP/tuist"
+          TUIST_ZIP="$RUNNER_TEMP/tuist.zip"
+          curl -fsSL "https://github.com/tuist/tuist/releases/download/${TUIST_VERSION}/tuist.zip" -o "$TUIST_ZIP"
+          echo "${TUIST_SHA256}  ${TUIST_ZIP}" | shasum -a 256 -c -
+          mkdir -p "$TUIST_DIR"
+          unzip -q "$TUIST_ZIP" -d "$TUIST_DIR"
+          echo "$TUIST_DIR" >> "$GITHUB_PATH"
+          export PATH="$TUIST_DIR:$PATH"
+          tuist version
+
+      - name: Generate project
+        # --no-open is required: `tuist generate` launches Xcode by default, which is wrong on a
+        # headless runner.
+        run: tuist generate --no-open
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -workspace ShakeBoard.xcworkspace \
+            -scheme ShakeBoard \
+            -configuration Release \
+            -derivedDataPath /tmp/shakeboard-ci-build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -workspace ShakeBoard.xcworkspace \
+            -scheme ShakeBoardTests \
+            -destination 'platform=macOS' \
+            -derivedDataPath /tmp/shakeboard-ci-tests \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
