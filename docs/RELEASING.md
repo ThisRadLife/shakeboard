@@ -74,14 +74,39 @@ without a separate key-rotation release signed by the old key.
 
 ## One-time GitHub Pages setup
 
-Create the `gh-pages` branch with an initial `appcast.xml`, then in repository Settings > Pages choose **Deploy from a
-branch**, branch **gh-pages**, folder **/(root)**. Confirm that
-`https://thisradlife.github.io/shakeboard/appcast.xml` is served over HTTPS before shipping the first Sparkle-enabled
-release.
+Run `scripts/publish-site.sh` once to create the `gh-pages` branch. Then in repository Settings > Pages choose
+**Deploy from a branch**, branch **gh-pages**, folder **/(root)**. Alternatively, configure Pages with the CLI:
+
+```bash
+gh api -X POST repos/ThisRadLife/shakeboard/pages \
+  -f 'source[branch]=gh-pages' \
+  -f 'source[path]=/'
+```
+
+After publishing the first appcast, confirm that `https://thisradlife.github.io/shakeboard/appcast.xml` is served over
+HTTPS before shipping the first Sparkle-enabled release.
 
 Brad still needs to decide whether the permanent feed host is `thisradlife.github.io/shakeboard` or a custom domain.
 If `SUFeedURL` changes after a release ships, keep serving the old URL and ship one transition release from that old
 feed whose app points at the new URL. Do not remove or redirect the old feed until that transition has propagated.
+
+## Publishing the website
+
+Run the site publisher from the repository root whenever committed files under `site/` are ready to go live:
+
+```bash
+scripts/publish-site.sh
+```
+
+The script exports `site/` from the current committed `HEAD`, replaces the website files on `gh-pages`, and preserves
+the branch's root `appcast.xml` byte-for-byte. It also preserves a root `CNAME`, removes stale site files, and ensures
+`.nojekyll` exists. It refuses uncommitted `site/` changes and any `appcast.xml` placed under `site/`. Review the
+printed change summary before confirming; use `--dry-run` to stop before committing or pushing.
+
+For the first publication, the script creates `gh-pages`. Enable GitHub Pages afterward in **Settings > Pages** using
+**Deploy from a branch**, branch **gh-pages**, folder **/(root)**, or use the `gh api` command in the one-time setup
+section above. The first site publish must happen before the first `scripts/publish-appcast.sh` run so the appcast
+publisher can safely add the update feed to the shared branch.
 
 ## Release flow
 
@@ -97,7 +122,9 @@ feed whose app points at the new URL. Do not remove or redirect the old feed unt
 9. Review the workflow log, draft notes, attached `ShakeBoard-X.Y.Z.dmg`, and `.sha256` file. Download the DMG and verify
    installation and first launch on a clean test Mac.
 10. Publish the draft release.
-11. On Brad's release Mac, publish the signed update entry from the repository root:
+11. Before the first-ever appcast publication, publish the website with `scripts/publish-site.sh` to create the shared
+    `gh-pages` branch. For later releases, publish the site first whenever the release includes website changes.
+12. On Brad's release Mac, publish the signed update entry from the repository root:
 
     ```bash
     scripts/publish-appcast.sh vX.Y.Z
@@ -109,7 +136,7 @@ feed whose app points at the new URL. Do not remove or redirect the old feed unt
     prepends the release to the RSS appcast while retaining older items, validates the XML, and prints the exact
     `gh-pages` diff. It commits and pushes only after a `y/N` confirmation. Use `--yes` only for an already reviewed
     unattended invocation.
-12. Verify the public feed after GitHub Pages deploys:
+13. Verify the public feed after GitHub Pages deploys:
 
     ```bash
     curl -fsSL https://thisradlife.github.io/shakeboard/appcast.xml | xmllint --noout -
@@ -118,10 +145,10 @@ feed whose app points at the new URL. Do not remove or redirect the old feed unt
 
     Then use **Settings > General > Check for Updates...** from the previous public ShakeBoard version and confirm it
     offers `X.Y.Z`, downloads it, and verifies it without a signature error.
-13. On a clean preferences domain, open Settings and confirm ShakeBoard's own one-time automatic-update question is
+14. On a clean preferences domain, open Settings and confirm ShakeBoard's own one-time automatic-update question is
     visible only in Settings > General, automatic checks remain off before answering, **Not Now** records the choice
     without enabling checks, and **Turn On** enables them. Confirm Sparkle does not show its own permission window.
-14. Update the Homebrew tap cask with the published version and the SHA-256 value from the release asset, then test
+15. Update the Homebrew tap cask with the published version and the SHA-256 value from the release asset, then test
     installation from the tap.
 
 To generate and inspect an appcast locally without committing or pushing, run:

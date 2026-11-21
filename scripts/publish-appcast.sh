@@ -182,6 +182,10 @@ MOUNTED=0
 
 # Fetch and push the configured release repository directly. The checkout's origin may
 # still use an old repository name and must never decide where the public feed lands.
+if ! git ls-remote --exit-code "$PUBLISH_REPO_URL" refs/heads/gh-pages >/dev/null 2>&1; then
+  echo "gh-pages does not exist yet; run scripts/publish-site.sh first" >&2
+  exit 1
+fi
 git -C "$ROOT_DIR" fetch "$PUBLISH_REPO_URL" "refs/heads/gh-pages:$FETCH_REF"
 git -C "$ROOT_DIR" worktree add -b "$WORKTREE_BRANCH" "$WORKTREE_DIR" "$FETCH_REF" >/dev/null
 WORKTREE_ADDED=1
