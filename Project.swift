@@ -46,7 +46,7 @@ let project = Project(
     settings: .settings(base: [
         "SWIFT_VERSION": "5.0",
         "MACOSX_DEPLOYMENT_TARGET": "14.0",
-        "MARKETING_VERSION": "1.0.0",
+        "MARKETING_VERSION": "0.9.0",
         "CURRENT_PROJECT_VERSION": "1",
         // Developer ID signing for a notarizable release (was ad-hoc "-"). Both the app and the
         // sandboxed Share Extension sign with this identity + hardened runtime, which notarization
