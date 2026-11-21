@@ -102,7 +102,7 @@ final class StripState: ObservableObject {
     @Published var picks = ClipPicks()
     @Published var notice: String?
     @Published var summoned = false
-    // Something in Settings needs attention (a failure, not a chosen pause): orange dot on the gear.
+    // Something in Settings needs attention (a failure or actionable notice, not a chosen pause): orange gear dot.
     @Published var gearAlert = false
     @Published var focusSearch = 0                   // bump to put the caret in the search field
     @Published var scrollHome = 0                    // bump on every open: scroll the newest copy to the left edge

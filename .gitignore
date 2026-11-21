@@ -22,3 +22,13 @@ Tuist/.build/
 .claude/
 AGENTS.md
 .codex/
+# Local signing and secret material
+sparkle-private-key.txt
+*.p12
+*.p8
+*.pem
+*.key
+.env
+.env.*
+config.local.*
+__pycache__/

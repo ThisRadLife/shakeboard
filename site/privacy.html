@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy - ShakeBoard</title><meta name="description" content="How ShakeBoard stores clipboard history locally, excludes sensitive apps, and controls optional read-only MCP access."><meta name="theme-color" content="#3B0A7A">
+  <link rel="canonical" href="https://thisradlife.github.io/shakeboard/privacy.html">
+  <meta property="og:type" content="website"><meta property="og:title" content="Privacy - ShakeBoard">
+  <meta property="og:description" content="How ShakeBoard stores clipboard history locally, excludes sensitive apps, and controls optional read-only MCP access.">
+  <meta property="og:url" content="https://thisradlife.github.io/shakeboard/privacy.html">
+  <meta property="og:image" content="https://thisradlife.github.io/shakeboard/assets/og-image-1200x630.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="ShakeBoard in a punk-zine collage with clipboard cards and a skateboard sticker.">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Privacy - ShakeBoard">
+  <meta name="twitter:description" content="How ShakeBoard stores clipboard history locally, excludes sensitive apps, and controls optional read-only MCP access.">
+  <meta name="twitter:image" content="https://thisradlife.github.io/shakeboard/assets/og-image-1200x630.jpg">
+  <link rel="icon" href="assets/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png"><link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-180.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="motion.js" defer></script>
+</head>
+<body class="privacy-page">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <svg class="grain-layer" aria-hidden="true" width="100%" height="100%"><filter id="paper-grain"><feTurbulence type="fractalNoise" baseFrequency="0.74" numOctaves="3" seed="9" stitchTiles="stitch" result="noise"></feTurbulence><feColorMatrix in="noise" type="luminanceToAlpha" result="noise-alpha"></feColorMatrix><feFlood class="grain-color" result="grain-color"></feFlood><feComposite in="grain-color" in2="noise-alpha" operator="in"></feComposite></filter><rect width="100%" height="100%" filter="url(#paper-grain)"></rect></svg>
+  <header class="site-header"><nav class="nav shell" aria-label="Main navigation">
+    <a class="brand" href="index.html" aria-label="ShakeBoard home"><img src="assets/punk/sticker-sb.png" width="40" height="60" alt=""><span>ShakeBoard</span></a>
+    <div class="nav-links"><a href="index.html#features">Features</a><a aria-current="page" href="privacy.html">Privacy</a><a href="index.html#faq">FAQ</a><a href="https://github.com/ThisRadLife/shakeboard">GitHub</a></div>
+    <a class="button button-small" href="https://github.com/ThisRadLife/shakeboard/releases/latest">Download</a>
+  </nav></header>
+
+  <main class="privacy-main" id="main">
+    <header class="privacy-hero"><div class="shell privacy-hero-grid">
+      <div class="paper-scrap"><p class="stamp stamp-orange">Privacy</p><h1>Your data stays on your Mac.</h1><svg class="scribble" viewBox="0 0 420 35" aria-hidden="true"><path d="M6 21c75-14 160 7 242-5 60-9 111 1 166-9M18 29c102-8 216 8 378-9"></path></svg><p class="lede">No account, cloud service, trackers, or telemetry. There is no ShakeBoard server waiting for your clipboard history.</p><p>The only network request is the update check you opt into: the <a href="https://thisradlife.github.io/shakeboard/appcast.xml">appcast</a> uses HTTPS, downloads are EdDSA-signed, and no system profile is sent.</p></div>
+      <img class="privacy-sticker" src="assets/punk/doodles/lock.png" width="240" height="240" alt="Hand-drawn padlock">
+    </div></header>
+
+    <article class="privacy-copy shell">
+      <section><p class="stamp stamp-purple">Stored locally</p><h2>What ShakeBoard keeps</h2><p>Clipboard history, paste stacks, pinboards, preferences, OCR text, and files ShakeBoard owns live in <code>~/Library/Application Support/ShakeBoard</code>. Existing Perch data is migrated there automatically on first launch. Files placed on the drag shelf are preserved or bookmarked; ShakeBoard does not relocate the originals.</p><p>Password managers and secure clipboard markers are excluded. You can add ignored apps, pause history, clear stored history, and hide individual cards from AI tools.</p></section>
+      <section><p class="stamp stamp-magenta">Optional</p><h2>AI access starts off</h2><p>The local <code>shakeboard-mcp</code> bridge for Claude Code and Codex is off by default. If you enable it, each verified client must ask for consent. Its five tools - recent, search, get, context, and stats - are read-only. They cannot change or delete clipboard records.</p><p>Hidden cards and excluded apps stay out of results. Image pixels and file contents are never returned. Requests are rate-limited and logged with time, verified client, tool, outcome, and counts, but never with clipboard text or search terms.</p></section>
+      <section><p class="stamp stamp-orange">Know the limit</p><h2>Redaction is best effort</h2><p>Before eligible text is returned through MCP, ShakeBoard replaces known secret patterns and common personal data. Pattern-based redaction can miss unfamiliar or unusually formatted secrets. Keep AI access off when you do not need it, exclude sensitive apps, and use Hide from AI for sensitive cards.</p></section>
+      <section class="coming-privacy"><p class="stamp stamp-yellow">Coming</p><h2>Encrypted backup + sync</h2><p>Encrypted backup and sync through a folder, network share, or iCloud Drive are planned. ShakeBoard does not provide cloud backup or sync today.</p></section>
+      <section><p class="stamp stamp-purple">Inspect it</p><h2>The code is open</h2><p>ShakeBoard is open source under Apache-2.0. <a href="https://github.com/ThisRadLife/shakeboard">Read the source</a>, review the <a href="https://github.com/ThisRadLife/shakeboard/blob/main/SECURITY.md">security model</a>, or <a href="index.html">return to the main page</a>.</p></section>
+    </article>
+  </main>
+
+  <footer class="site-footer"><div class="shell footer-grid">
+    <a class="footer-brand" href="index.html"><img src="assets/punk/sticker-sb.png" width="64" height="96" alt=""><span>ShakeBoard</span></a>
+    <div><p>Open source under Apache-2.0. Local data. No account. No telemetry.</p><p>(c) 2026 Clay Money Inc.</p></div>
+    <nav class="footer-links" aria-label="Footer navigation"><a href="https://github.com/ThisRadLife/shakeboard">GitHub</a><a href="https://github.com/ThisRadLife/shakeboard/releases/latest">Releases</a><a href="https://github.com/ThisRadLife/shakeboard/blob/main/SECURITY.md">Security</a><a href="privacy.html">Privacy</a><a href="https://github.com/ThisRadLife/shakeboard/blob/main/CONTRIBUTING.md">Contributing</a></nav>
+  </div></footer>
+</body>
+</html>

@@ -9,6 +9,40 @@ import AppKit
 import Carbon
 @testable import ShakeBoard
 
+@MainActor
+final class DebugSnapshotTests: XCTestCase {
+    func testDefaultScaleUsesLegacyRenderingBytes() throws {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 24, height: 16))
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.systemPurple.cgColor
+
+        let legacyRep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: legacyRep)
+        let legacyPNG = try XCTUnwrap(legacyRep.representation(using: .png, properties: [:]))
+
+        XCTAssertEqual(DebugSnapshot.png(of: view, environment: [:]), legacyPNG)
+        XCTAssertEqual(DebugSnapshot.png(of: view, environment: ["PERCH_DEBUG_SCALE": "1"]), legacyPNG)
+    }
+
+    func testScaleIsParsedAndClampedToOneThroughThree() {
+        XCTAssertEqual(DebugSnapshot.scale(environment: [:]), 1)
+        XCTAssertEqual(DebugSnapshot.scale(environment: ["PERCH_DEBUG_SCALE": "not-a-number"]), 1)
+        XCTAssertEqual(DebugSnapshot.scale(environment: ["PERCH_DEBUG_SCALE": "0.5"]), 1)
+        XCTAssertEqual(DebugSnapshot.scale(environment: ["PERCH_DEBUG_SCALE": "2.25"]), 2.25)
+        XCTAssertEqual(DebugSnapshot.scale(environment: ["PERCH_DEBUG_SCALE": "4"]), 3)
+    }
+
+    func testScaledRenderingUsesRequestedPixelDimensionsAndLogicalSize() throws {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 24, height: 16))
+        let png = try XCTUnwrap(DebugSnapshot.png(of: view, environment: ["PERCH_DEBUG_SCALE": "2.5"]))
+        let rep = try XCTUnwrap(NSBitmapImageRep(data: png))
+
+        XCTAssertEqual(rep.pixelsWide, 60)
+        XCTAssertEqual(rep.pixelsHigh, 40)
+        XCTAssertEqual(rep.size, view.bounds.size)
+    }
+}
+
 final class PerchPrefsTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suite: String!

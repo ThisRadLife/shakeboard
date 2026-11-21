@@ -351,9 +351,8 @@ final class AIConsentPanel {
 
     // Dev: write the panel's own rendering (scripts can't screen-record).
     func snapshot(to url: URL) {
-        guard let v = panel?.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
-        v.cacheDisplay(in: v.bounds, to: rep)
-        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        guard let v = panel?.contentView, let png = DebugSnapshot.png(of: v) else { return }
+        try? png.write(to: url)
     }
 }
 
