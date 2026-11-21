@@ -11,8 +11,7 @@ cask "shakeboard" do
 
   app "ShakeBoard.app"
 
-  # Enable once Sparkle ships.
-  # auto_updates true
+  auto_updates true
 
   zap trash: [
     "~/Library/Application Support/ShakeBoard",

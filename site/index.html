@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShakeBoard - Clipboard history and paste stacks for Mac</title>
+  <meta name="description" content="ShakeBoard keeps clipboard history, files, paste stacks, and pinboards in one strip at the bottom of your Mac. Your data stays on your Mac.">
+  <meta name="theme-color" content="#3B0A7A">
+  <link rel="canonical" href="https://thisradlife.github.io/shakeboard/">
+  <meta property="og:type" content="website"><meta property="og:title" content="ShakeBoard - Everything you copy. One shake away.">
+  <meta property="og:description" content="Clipboard history, a drag shelf, paste stacks, pinboards, and on-device OCR for macOS. Local data, no account, no telemetry.">
+  <meta property="og:url" content="https://thisradlife.github.io/shakeboard/">
+  <meta property="og:image" content="https://thisradlife.github.io/shakeboard/assets/og-image-1200x630.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="ShakeBoard in a punk-zine collage with clipboard cards and a skateboard sticker.">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="ShakeBoard - Everything you copy. One shake away.">
+  <meta name="twitter:description" content="Clipboard history, a drag shelf, paste stacks, pinboards, and on-device OCR for macOS. Local data, no account, no telemetry.">
+  <meta name="twitter:image" content="https://thisradlife.github.io/shakeboard/assets/og-image-1200x630.jpg">
+  <link rel="icon" href="assets/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-180.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="motion.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <svg class="grain-layer" aria-hidden="true" width="100%" height="100%"><filter id="paper-grain"><feTurbulence type="fractalNoise" baseFrequency="0.74" numOctaves="3" seed="9" stitchTiles="stitch" result="noise"></feTurbulence><feColorMatrix in="noise" type="luminanceToAlpha" result="noise-alpha"></feColorMatrix><feFlood class="grain-color" result="grain-color"></feFlood><feComposite in="grain-color" in2="noise-alpha" operator="in"></feComposite></filter><rect width="100%" height="100%" filter="url(#paper-grain)"></rect></svg>
+  <header class="site-header"><nav class="nav shell" aria-label="Main navigation">
+    <a class="brand" href="#top" aria-label="ShakeBoard home"><img src="assets/punk/sticker-sb.png" width="40" height="60" alt=""><span>ShakeBoard</span></a>
+    <div class="nav-links"><a href="#features">Features</a><a href="#privacy">Privacy</a><a href="#faq">FAQ</a><a href="https://github.com/ThisRadLife/shakeboard">GitHub</a></div>
+    <a class="button button-small" href="https://github.com/ThisRadLife/shakeboard/releases/latest">Download</a>
+  </nav></header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title"><div class="shell hero-inner">
+      <div class="hero-copy paper-scrap"><p class="stamp">Open source for macOS 14+</p><h1 id="hero-title">Everything you copy. One shake away.</h1>
+        <svg class="scribble" viewBox="0 0 420 35" aria-hidden="true"><path d="M6 21c75-14 160 7 242-5 60-9 111 1 166-9M18 29c102-8 216 8 378-9"></path></svg>
+        <p class="lede">Clipboard history, files, paste stacks, and pinboards at the bottom of your Mac. Your data stays on your Mac. No account. No telemetry.</p>
+        <div class="actions"><a class="button" href="https://github.com/ThisRadLife/shakeboard/releases/latest">Download the DMG</a><a class="button button-paper" href="https://github.com/ThisRadLife/shakeboard">View source</a></div>
+        <p class="fine-print">macOS 14 or later</p>
+      </div>
+      <img class="hero-sticker" src="assets/punk/sticker-sb.png" width="160" height="240" alt="ShakeBoard skateboard sticker">
+    </div></section>
+
+    <section class="overview" id="features" aria-labelledby="overview-title"><div class="shell">
+      <header class="section-heading"><p class="stamp stamp-orange">The whole board</p><h2 id="overview-title">13 ways to keep your flow moving.</h2><p>Everything at a glance. The five big moves get a closer look below.</p></header>
+      <div class="sticker-sheet">
+        <article class="feature-sticker tilt-a"><img src="assets/punk/doodles/cards.png" width="120" height="120" alt=""><h3>Clipboard history</h3><p>Text, code, links, images, and files in one searchable strip.</p></article>
+        <article class="feature-sticker tilt-b"><img src="assets/punk/doodles/shelf.png" width="120" height="120" alt=""><h3>Drag shelf</h3><p>Park files, then drag them into the app where you need them.</p></article>
+        <article class="feature-sticker tilt-c"><img src="assets/punk/doodles/shake.png" width="120" height="120" alt=""><h3>Shake to show</h3><p>Shake the mouse or press Command-Space to reveal the strip.</p></article>
+        <article class="feature-sticker tilt-d"><img src="assets/punk/doodles/clipboard.png" width="120" height="120" alt=""><h3>Paste stacks</h3><p>Collect a batch, mark it Ready, then paste each item in order.</p></article>
+        <article class="feature-sticker tilt-b"><img src="assets/punk/doodles/cards.png" width="120" height="120" alt=""><h3>Pick the order</h3><p>Select cards in click order, then Send to Stack together.</p></article>
+        <article class="feature-sticker tilt-a"><img src="assets/punk/doodles/split.png" width="120" height="120" alt=""><h3>Split into Stack</h3><p>Turn lines, tabs, or comma-separated text into paste steps.</p></article>
+        <article class="feature-sticker tilt-d"><img src="assets/punk/doodles/pin.png" width="120" height="120" alt=""><h3>Pinboards</h3><p>Keep reusable copies on named, colored, ordered boards.</p></article>
+        <article class="feature-sticker tilt-c"><img src="assets/punk/doodles/ocr.png" width="120" height="120" alt=""><h3>On-device OCR</h3><p>Find and use text inside copied or shelved images.</p></article>
+        <article class="feature-sticker tilt-a"><img src="assets/punk/doodles/edit.png" width="120" height="120" alt=""><h3>Edit + Quick Look</h3><p>Preview, edit, clean up, change case, or format JSON.</p></article>
+        <article class="feature-sticker tilt-c"><img src="assets/punk/doodles/themes.png" width="120" height="120" alt=""><h3>Themes</h3><p>Choose a built-in look or build a custom color theme.</p></article>
+        <article class="feature-sticker tilt-b"><img src="assets/punk/doodles/ai.png" width="120" height="120" alt=""><h3>AI / MCP bridge</h3><p>Read-only for Claude Code and Codex; off by default, per-app consent, best-effort redaction.</p></article>
+        <article class="feature-sticker tilt-d"><img src="assets/punk/doodles/lock.png" width="120" height="120" alt=""><h3>Private by default</h3><p>Your data stays on your Mac. No account, no telemetry, and app exclusions.</p></article>
+        <article class="feature-sticker coming-sticker tilt-a"><span class="coming-label">Coming</span><img src="assets/punk/doodles/sync.png" width="120" height="120" alt=""><h3>Encrypted backup + sync</h3><p>Planned for folders, network shares, or iCloud Drive.</p></article>
+      </div>
+    </div></section>
+
+    <section class="detail detail-ink" aria-labelledby="strip-title"><div class="shell">
+      <div class="detail-copy"><p class="stamp stamp-yellow">The strip</p><h2 id="strip-title">Your clipboard. Right there.</h2><p>Search text, code, links, images, and copied files without breaking focus. Press Return to paste, Shift-Return for plain text, or drag an item straight into another app.</p></div>
+      <figure class="punk-frame frame-light"><div class="callout-row"><span class="callout magenta">search everything</span><svg class="arrow" viewBox="0 0 130 48" aria-hidden="true"><path d="M4 9c38 2 69 12 112 27M98 24l19 12-20 5"></path></svg><span class="callout orange">Return = paste</span></div>
+        <div class="screenshot-scroll"><img src="assets/screens/strip.png" width="1100" height="174" loading="lazy" alt="ShakeBoard's bottom strip showing text, code, link, image, and file cards."></div><figcaption><span class="scroll-note" aria-hidden="true">scroll &rarr;</span>Search, paste, preview, pin, edit, or drag out.</figcaption>
+      </figure>
+    </div></section>
+
+    <section class="detail detail-paper" aria-labelledby="stacks-title"><div class="shell">
+      <div class="detail-copy detail-copy-right"><p class="stamp stamp-purple">Paste stacks</p><h2 id="stacks-title">Copy now. Paste in order later.</h2><p>Collect a batch while you work. Mark a stack Ready and each Command-V pastes the next item; completed stacks stay archived so you can run them again.</p><p>For existing history, click cards in the order you want and send the set to a stack.</p></div>
+      <div class="double-shot">
+        <figure class="punk-frame"><div class="callout-row"><span class="callout yellow">Ready: Cmd-V pastes the next</span><svg class="arrow" viewBox="0 0 130 48" aria-hidden="true"><path d="M5 8c42 4 75 14 112 29M99 25l18 12-21 4"></path></svg></div><div class="screenshot-scroll"><img src="assets/screens/lane.png" width="900" height="174" loading="lazy" alt="ShakeBoard with a paste stack ready to paste each item in order."></div><figcaption><span class="scroll-note" aria-hidden="true">scroll &rarr;</span>One stack can collect while another is ready.</figcaption></figure>
+        <figure class="punk-frame small-shot"><div class="callout-row"><span class="callout magenta">click order 1-2-3</span><svg class="arrow" viewBox="0 0 130 48" aria-hidden="true"><path d="M5 8c42 4 75 14 112 29M99 25l18 12-21 4"></path></svg></div><div class="screenshot-scroll"><img src="assets/screens/picks.png" width="820" height="134" loading="lazy" alt="Three non-adjacent clipboard cards selected in click order, numbered one, two, and three."></div><figcaption>Send exactly that order to a stack.</figcaption></figure>
+      </div>
+    </div></section>
+
+    <section class="detail detail-purple" aria-labelledby="pinboards-title"><div class="shell">
+      <div class="detail-copy"><p class="stamp stamp-yellow">Pinboards</p><h2 id="pinboards-title">The good stuff stays pinned.</h2><p>Make named, colored boards for addresses, replies, code, or anything you reuse. A copy can live on more than one board, and you control its order.</p></div>
+      <figure class="punk-frame frame-light"><div class="callout-row"><span class="callout orange">named + color coded</span><svg class="arrow" viewBox="0 0 130 48" aria-hidden="true"><path d="M4 9c38 2 69 12 112 27M98 24l19 12-20 5"></path></svg><span class="callout yellow">drag to reorder</span></div><div class="screenshot-scroll"><img src="assets/screens/pinboards.png" width="1030" height="174" loading="lazy" alt="ShakeBoard showing a named pinboard with reusable clipboard cards arranged in order."></div><figcaption><span class="scroll-note" aria-hidden="true">scroll &rarr;</span>Pinned is always your first board.</figcaption></figure>
+    </div></section>
+
+    <section class="detail detail-paper" aria-labelledby="ocr-title"><div class="shell">
+      <div class="detail-copy detail-copy-right"><p class="stamp stamp-magenta">On-device OCR</p><h2 id="ocr-title">Search the words inside an image.</h2><p>Apple Vision recognizes text in copied and shelved images on your Mac. Search it, copy it, paste it, or split it into a stack without sending the image away.</p></div>
+      <figure class="punk-frame"><div class="callout-row"><span class="callout magenta">text found in a photo</span><svg class="arrow" viewBox="0 0 130 48" aria-hidden="true"><path d="M5 8c42 4 75 14 112 29M99 25l18 12-21 4"></path></svg></div><div class="screenshot-scroll"><img src="assets/screens/ocr.png" width="918" height="174" loading="lazy" alt="A ShakeBoard search matching recognized text inside a copied image."></div><figcaption><span class="scroll-note" aria-hidden="true">scroll &rarr;</span>OCR is optional and runs on-device.</figcaption></figure>
+    </div></section>
+
+    <section class="detail detail-ink" id="privacy" aria-labelledby="ai-title"><div class="shell">
+      <div class="detail-copy"><p class="stamp stamp-orange">AI bridge + privacy</p><h2 id="ai-title">A gate between your copies and AI.</h2><p>The local MCP bridge for Claude Code and Codex is off by default. Its tools are read-only, each verified client needs consent, and eligible text gets best-effort redaction before it leaves ShakeBoard.</p><p>Connections use an owner-only local Unix socket. Requests log time, client, tool, outcome, and counts - never clipboard content or search terms. ShakeBoard has no account and no telemetry.</p><a class="paper-link" href="privacy.html">Read the full privacy policy</a></div>
+      <div class="privacy-shots">
+        <figure class="punk-frame frame-light compact-frame"><div class="callout-row"><span class="callout yellow">you approve each app</span><svg class="arrow" viewBox="0 0 130 48" aria-hidden="true"><path d="M4 9c38 2 69 12 112 27M98 24l19 12-20 5"></path></svg></div><div class="screenshot-fit"><img src="assets/screens/consent.png" width="420" height="283" loading="lazy" alt="ShakeBoard asking for consent before a verified AI client can use read-only clipboard tools."></div><figcaption>Allow once, always allow, or deny.</figcaption></figure>
+        <figure class="punk-frame frame-light compact-frame"><div class="callout-row"><span class="callout orange">OFF by default</span></div><div class="screenshot-fit"><img src="assets/screens/settings-privacy.png" width="722" height="331" loading="lazy" alt="ShakeBoard Privacy and AI settings with AI access turned off."></div><figcaption>Exclude apps or hide individual cards from AI.</figcaption></figure>
+      </div>
+    </div></section>
+
+    <section class="download" aria-labelledby="download-title"><div class="shell download-grid">
+      <div><p class="stamp stamp-purple">Get ShakeBoard</p><h2 id="download-title">Install it. Keep moving.</h2><p>Download <code>ShakeBoard-&lt;version&gt;.dmg</code> from GitHub Releases, open it, and drag ShakeBoard to Applications.</p><div class="actions"><a class="button" href="https://github.com/ThisRadLife/shakeboard/releases/latest">Download the DMG</a><a class="button button-paper" href="https://github.com/ThisRadLife/shakeboard">Build from source</a></div></div>
+      <aside class="install-note" aria-label="Requirements and install options"><p><strong>Needs:</strong> macOS 14 or later.</p><p>Accessibility permission powers mouse-shake detection and ordered stack advancement after Command-V. Clipboard history works without it.</p><p>Built-in signed updates are opt-in. Use "Automatically check for updates" or "Check for Updates..." in Settings &gt; General.</p><p class="coming-line"><span>Coming</span> <code>brew install --cask shakeboard</code></p></aside>
+    </div></section>
+
+    <section class="faq" id="faq" aria-labelledby="faq-title"><div class="shell faq-grid">
+      <header class="section-heading"><p class="stamp stamp-yellow">FAQ</p><h2 id="faq-title">Straight answers.</h2></header>
+      <div class="questions">
+        <details><summary>What does ShakeBoard capture?</summary><p>Copied text, highlighted code, links, images, and files, plus files you place on the drag shelf. Password managers and secure clipboard markers are excluded.</p></details>
+        <details><summary>Where is my data stored?</summary><p>On your Mac in <code>~/Library/Application Support/ShakeBoard</code>. There is no ShakeBoard account, cloud service, or telemetry. Encrypted backup and sync are Coming.</p></details>
+        <details><summary>Why does it need Accessibility permission?</summary><p>For global mouse-shake detection and to follow Command-V so a ready stack can advance. History, search, pinboards, OCR, and the shelf still work without it.</p></details>
+        <details><summary>Does ShakeBoard replace Command-V?</summary><p>No. Normal paste stays normal. A stack advances only after you explicitly mark it Ready.</p></details>
+        <details><summary>Does OCR leave my Mac?</summary><p>No. Apple Vision OCR runs on your Mac and can be turned off.</p></details>
+        <details><summary>Can Claude Code or Codex read my clipboard?</summary><p>Only after you enable AI access and approve that client. The local tools are read-only, respect exclusions, use best-effort redaction, and keep a content-free request log.</p></details>
+      </div>
+    </div></section>
+  </main>
+
+  <footer class="site-footer"><div class="shell footer-grid">
+    <a class="footer-brand" href="#top"><img src="assets/punk/sticker-sb.png" width="64" height="96" alt=""><span>ShakeBoard</span></a>
+    <div><p>Open source under Apache-2.0. Local data. No account. No telemetry.</p><p>(c) 2026 Clay Money Inc.</p></div>
+    <nav class="footer-links" aria-label="Footer navigation"><a href="https://github.com/ThisRadLife/shakeboard">GitHub</a><a href="https://github.com/ThisRadLife/shakeboard/releases/latest">Releases</a><a href="https://github.com/ThisRadLife/shakeboard/blob/main/SECURITY.md">Security</a><a href="privacy.html">Privacy</a><a href="https://github.com/ThisRadLife/shakeboard/blob/main/CONTRIBUTING.md">Contributing</a></nav>
+  </div></footer>
+</body>
+</html>

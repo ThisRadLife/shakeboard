@@ -65,6 +65,49 @@ enum PerchPaths {
     }()
 }
 
+enum DebugSnapshot {
+    static func scale(environment: [String: String] = ProcessInfo.processInfo.environment) -> CGFloat {
+        guard let raw = environment["PERCH_DEBUG_SCALE"],
+              let value = Double(raw), !value.isNaN else { return 1 }
+        if value < 1 { return 1 }
+        if value > 3 { return 3 }
+        return CGFloat(value)
+    }
+
+    static func png(of view: NSView) -> Data? {
+        png(of: view, environment: ProcessInfo.processInfo.environment)
+    }
+
+    static func png(of view: NSView, environment: [String: String]) -> Data? {
+        let bounds = view.bounds
+        let scale = scale(environment: environment)
+        if scale == 1 {
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { return nil }
+            view.cacheDisplay(in: bounds, to: rep)
+            return rep.representation(using: .png, properties: [:])
+        }
+
+        let pixelsWide = Int((bounds.width * scale).rounded())
+        let pixelsHigh = Int((bounds.height * scale).rounded())
+        guard pixelsWide > 0, pixelsHigh > 0,
+              let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: pixelsWide,
+                pixelsHigh: pixelsHigh,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+              ) else { return nil }
+        rep.size = bounds.size
+        view.cacheDisplay(in: bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
+    }
+}
+
 // Panel geometry. The strip spans the screen's visibleFrame (above the Dock), less a small inset.
 enum Layout {
     static let stripHeight: CGFloat = 174
@@ -870,9 +913,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Settings window (Settings.swift): opened from the strip's gear, Command-comma in the strip, and by
     // relaunching ShakeBoard (Spotlight / Finder / Dock) -- there is no menu-bar icon.
-    private(set) lazy var settings = SettingsModel(defaults: defaults)
+    private lazy var appActivation = AppActivationCoordinator()
+    private(set) lazy var updateController = UpdateController(defaults: defaults, activation: appActivation)
+    private(set) lazy var settings = SettingsModel(defaults: defaults, updater: updateController)
     private(set) lazy var settingsWindow: SettingsWindowController = {
-        let c = SettingsWindowController(model: settings, themes: themeStore)
+        let c = SettingsWindowController(model: settings, themes: themeStore, activation: appActivation)
         c.willShow = { [weak self] in
             guard let self else { return }
             if self.stripState.summoned { self.dismissStrip() }   // Settings takes the keyboard; the strip goes
@@ -1577,6 +1622,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
                 guard let self else { return }
+                if show.contains("launch") {
+                    self.seedLaunchDemo(show)
+                    return
+                }
                 // Dev-only OCR seed: PERCH_DEBUG_SHOW=ocr plus PERCH_OCR_SEED=/path/to/image.png.
                 if show.contains("ocr"),
                    let path = ProcessInfo.processInfo.environment["PERCH_OCR_SEED"],
@@ -1692,12 +1741,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if show.contains("first") { self.stripState.cursor = self.stripState.sections.order.first }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         guard let v = self.panel?.contentView,
-                              let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
-                        v.cacheDisplay(in: v.bounds, to: rep)
+                              let png = DebugSnapshot.png(of: v) else { return }
                         let name = show.contains("stripsnapshot")
                             ? "strip-snapshot-\(self.themeStore.current.id).png" : "strip-snapshot.png"
-                        try? rep.representation(using: .png, properties: [:])?
-                            .write(to: dir.appendingPathComponent(name))
+                        try? png.write(to: dir.appendingPathComponent(name))
                         NSLog("ShakeBoard debug: strip snapshot \(Int(v.bounds.width))x\(Int(v.bounds.height)) written")
                     }
                 }
@@ -1778,11 +1825,148 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         seed(0)
     }
 
+    // Dev-only (PERCH_DEBUG_SHOW=launch): neutral launch-art data in PERCH_DATA_DIR. Synthetic snapshots only;
+    // this path never reads, arms, or writes the real pasteboard.
+    private func seedLaunchDemo(_ show: String) {
+        let swift = """
+        // A friendly launch-demo helper
+        func greet(_ name: String) -> String {
+            let message = "Hello, \\(name)!"
+            return message
+        }
+
+        print(greet("Friend"))
+        """
+        let json = """
+        {
+          "app": "ShakeBoard",
+          "version": "1.0",
+          "local": true,
+          "theme": "midnight",
+          "items": 10
+        }
+        """
+        let samples: [(String, String, String)] = [
+            ("Standup moved to 10:30 -- same room.", "com.tinyspeck.slackmacgap", "Slack"),
+            ("Thanks so much! I'll send the files tonight.", "com.apple.mail", "Mail"),
+            (swift, "com.apple.dt.Xcode", "Xcode"),
+            (json, "com.apple.Terminal", "Terminal"),
+            ("https://github.com/ThisRadLife/shakeboard", "com.apple.Safari", "Safari"),
+            ("hello@example.com", "com.apple.mail", "Mail"),
+            ("(555) 010-2030", "com.apple.Notes", "Notes"),
+            ("221B Example Street, Springfield", "com.apple.Safari", "Safari"),
+            ("git commit -m \"Fix login bug\"", "com.apple.Terminal", "Terminal"),
+            ("Ship Friday", "com.tinyspeck.slackmacgap", "Slack"),
+        ]
+        let imageURLs = (ProcessInfo.processInfo.environment["PERCH_LAUNCH_IMAGES"] ?? "")
+            .split(separator: ":").map { URL(fileURLWithPath: String($0)) }
+        var ids: [UUID] = []
+
+        @MainActor func finish() {
+            guard ids.count >= samples.count, let pinned = pinboards.defaultBoardID else {
+                NSLog("ShakeBoard debug: launch seed stopped because one or more demo copies could not be stored")
+                return
+            }
+            func relinquishLaunchDemoKey() {
+                guard let panel else { return }
+                // Captures run while the developer is typing elsewhere; keep the demo visible without stealing keys.
+                stripDismissing = true
+                defer { stripDismissing = false }
+                relinquishKey(panel)
+            }
+            let dir = PerchPaths.overrideDir!
+            let seedDir = dir.appendingPathComponent("seed-files", isDirectory: true)
+            try? FileManager.default.createDirectory(at: seedDir, withIntermediateDirectories: true)
+            let shelfFiles: [(String, String)] = [
+                ("Launch checklist.md", "# Launch checklist\n\n- Review screenshots\n- Verify links\n- Ship demo\n"),
+                ("Release notes.txt", "ShakeBoard 1.0\n\nA small, local launch demo.\n"),
+                ("Brand colors.txt", "Midnight #1B1D2A\nPurple #7C5CFC\nOrange #F59E42\n"),
+            ]
+            var shelfURLs = shelfFiles.map { name, contents -> URL in
+                let url = seedDir.appendingPathComponent(name)
+                try? Data(contents.utf8).write(to: url)
+                return url
+            }
+            if let first = imageURLs.first, let data = try? Data(contentsOf: first) {
+                let hero = seedDir.appendingPathComponent("Hero sketch.png")
+                try? data.write(to: hero)
+                shelfURLs.append(hero)
+            }
+            if model.items.isEmpty { _ = model.add(shelfURLs) }
+
+            let contact = pasteStack.newStack(name: "Contact block", clips: [ids[5], ids[6], ids[7]])
+            let release = pasteStack.newStack(name: "Release", clips: [ids[8], ids[9]])
+            pasteStack.collect(into: release)
+            pasteStack.debugMarkReady(contact, cursor: 0)
+            pasteStack.selectedID = contact
+
+            _ = pinboards.add([ids[4]], to: pinned)
+            let snippets = pinboards.create(name: "Snippets", color: .purple, clipIDs: [ids[2], ids[3], ids[8]])
+            _ = pinboards.create(name: "Replies", color: .orange, clipIDs: [ids[0], ids[1]])
+
+            summonStrip()
+            relinquishLaunchDemoKey()
+            if pasteStack.showsLane != show.contains("lane") { pasteStack.railTapped() }
+            if show.contains("board"), let snippets { stripState.toggleBoard(snippets) }
+            if show.contains("stacksfilter") { stripState.filter = .stacks }
+            if let token = show.split(whereSeparator: { $0 == "," || $0.isWhitespace })
+                .first(where: { $0.hasPrefix("query=") }) {
+                stripState.query = String(token.dropFirst("query=".count))
+            }
+            if show.contains("edit") {
+                strip.beginEdit(ids[2])
+                relinquishLaunchDemoKey()
+            }
+            if show.contains("picks") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    let recent = self.stripState.sections.recent.map(\.id)
+                    guard recent.count >= 5 else { return }
+                    self.stripState.clickClip(recent[2], command: false, shift: false)
+                    self.stripState.clickClip(recent[0], command: true, shift: false)
+                    self.stripState.clickClip(recent[4], command: true, shift: false)
+                }
+            }
+            if show.contains("snapshot") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.snapshotStrip(to: dir.appendingPathComponent("launch-strip.png"))
+                }
+            }
+        }
+
+        @MainActor func seedImage(_ index: Int) {
+            guard imageURLs.indices.contains(index) else { finish(); return }
+            guard let data = try? Data(contentsOf: imageURLs[index]) else { seedImage(index + 1); return }
+            let snapshot = RawSnapshot(changeCount: -1, allTypes: [ClipTypes.png],
+                                       items: [[RawRep(type: ClipTypes.png, data: data)]])
+            let photos = index.isMultiple(of: 2)
+            let capture = CapturedClipboard(snapshot: snapshot,
+                                            sourceBundleID: photos ? "com.apple.Photos" : "com.apple.screencapture",
+                                            sourceAppName: photos ? "Photos" : "Screenshot", capturedAt: Date())
+            clipStore.ingest(capture) { clip, isNew in
+                if let clip, isNew { self.ocrService.enqueue(clip, priority: true) }
+                seedImage(index + 1)
+            }
+        }
+
+        @MainActor func seedText(_ index: Int) {
+            guard samples.indices.contains(index) else { seedImage(0); return }
+            let sample = samples[index]
+            let snapshot = RawSnapshot(changeCount: -1, allTypes: [ClipTypes.plainText],
+                                       items: [[RawRep(type: ClipTypes.plainText, data: Data(sample.0.utf8))]])
+            let capture = CapturedClipboard(snapshot: snapshot, sourceBundleID: sample.1, sourceAppName: sample.2,
+                                            capturedAt: Date().addingTimeInterval(TimeInterval(index - samples.count)))
+            clipStore.ingest(capture) { clip, _ in
+                if let clip { ids.append(clip.id) }
+                seedText(index + 1)
+            }
+        }
+        seedText(0)
+    }
+
     private func snapshotStrip(to url: URL) {
         guard let view = panel?.contentView,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
-        view.cacheDisplay(in: view.bounds, to: rep)
-        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+              let png = DebugSnapshot.png(of: view) else { return }
+        try? png.write(to: url)
         NSLog("ShakeBoard debug: strip snapshot \(Int(view.bounds.width))x\(Int(view.bounds.height)) written to \(url.lastPathComponent)")
     }
 

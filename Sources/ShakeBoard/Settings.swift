@@ -4,8 +4,8 @@
 //  relaunching ShakeBoard from Spotlight / Finder / the Dock -- ShakeBoard has no menu-bar icon).
 //
 //    PerchPrefs            typed, sanitized wrapper over ShakeBoard's prefs suite (keys kept from earlier builds)
-//    SettingsAlerts        every failure line (once status-menu lines), by section; any
-//                          failure lights the warning dot on the strip's gear
+//    SettingsAlerts        failures and informational status rows (once status-menu lines), by section;
+//                          failures and actionable update notices light the strip gear's orange dot
 //    ShortcutRecorderLogic what a key press means while recording the stack shortcut
 //    SettingsModel         the window's observable state + the actions AppDelegate wires in
 //    SettingsWindowController  a plain AppKit NSWindow hosting SwiftUI. NOT the SwiftUI `Settings` scene /
@@ -45,6 +45,10 @@ struct PerchPrefs {
     var showRenameWelcome: Bool {
         get { defaults.bool(forKey: PerchMigration.welcomeKey) }
         set { defaults.set(newValue, forKey: PerchMigration.welcomeKey) }
+    }
+    var updateChoiceMade: Bool {
+        get { defaults.bool(forKey: "updateChoiceMade") }
+        set { defaults.set(newValue, forKey: "updateChoiceMade") }
     }
 
     var addImagesToShelf: Bool {
@@ -203,8 +207,11 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 }
 
 struct SettingsAlert: Identifiable, Equatable {
-    enum Severity: Equatable { case failure, notice }
-    enum Action: Equatable { case openAccessibility }
+    enum Severity: Equatable {
+        case failure, notice, attentionNotice
+        var needsAttention: Bool { self != .notice }
+    }
+    enum Action: Equatable { case openAccessibility, installUpdate }
     let id: String
     let section: SettingsSection
     let text: String
@@ -230,6 +237,7 @@ enum SettingsAlerts {
         var migrationLegacyLeftBehind: URL? = nil
         var loginItemError: String? = nil
         var aiBridgeError: String? = nil      // only reported while AI access is on
+        var availableUpdate: String? = nil
     }
 
     static func compute(_ s: Inputs) -> [SettingsAlert] {
@@ -238,6 +246,15 @@ enum SettingsAlerts {
             out.append(.init(id: "ax", section: .general,
                              text: "Accessibility is off for ShakeBoard, so shake-to-show doesn't work.",
                              action: .openAccessibility))
+        }
+        if let version = s.availableUpdate {
+            out.append(.init(
+                id: "update-available",
+                section: .general,
+                text: "ShakeBoard \(version) is available.",
+                severity: .attentionNotice,
+                action: .installUpdate
+            ))
         }
         if let failure = s.migrationFailure {
             let text: String
@@ -308,7 +325,7 @@ enum SettingsAlerts {
     }
 
     // The gear's warning dot: real failures only (a pause the user chose is shown, but isn't a warning).
-    static func needsAttention(_ alerts: [SettingsAlert]) -> Bool { alerts.contains { $0.severity == .failure } }
+    static func needsAttention(_ alerts: [SettingsAlert]) -> Bool { alerts.contains { $0.severity.needsAttention } }
 }
 
 // MARK: - Shortcut recording
@@ -401,22 +418,33 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var auditEntries: [AIAuditEntry] = []
     @Published var connectOutput: [AIConnectTarget: String] = [:]
     @Published private(set) var connecting: Set<AIConnectTarget> = []
+    @Published private(set) var updatesConfigured = false
+    @Published private(set) var canCheckForUpdates = false
+    @Published private(set) var automaticallyChecksForUpdates = false
     var actions = Actions()
+    private let updater: UpdaterDriving?
+    private var lastAlertInputs = SettingsAlerts.Inputs()
 
-    init(defaults: UserDefaults) { prefs = PerchPrefs(defaults: defaults) }
+    init(defaults: UserDefaults, updater: UpdaterDriving? = nil) {
+        prefs = PerchPrefs(defaults: defaults)
+        self.updater = updater
+        updater?.onStateChange = { [weak self] in self?.refreshUpdaterState() }
+        refreshUpdaterState()
+    }
 
     var needsAttention: Bool { SettingsAlerts.needsAttention(alerts) }
+    var shouldShowUpdateChoice: Bool { updatesConfigured && !prefs.updateChoiceMade }
     func alerts(in s: SettingsSection) -> [SettingsAlert] { alerts.filter { $0.section == s } }
 
     // Pull live state (cheap; called on open, on a timer while open, and whenever a failure flag moves).
     // `full` = the window is open: also re-read login item, shortcut and counts (skipped by the background
     // tick that only keeps the gear's warning dot current).
     func refresh(alertInputs: SettingsAlerts.Inputs, full: Bool = true) {
-        let a = SettingsAlerts.compute(alertInputs)
-        if a != alerts { alerts = a }
+        lastAlertInputs = alertInputs
         if alertInputs.accessibilityTrusted != accessibilityTrusted { accessibilityTrusted = alertInputs.accessibilityTrusted }
         let pasteboard = actions.pasteboardAccessStatus()
         if pasteboard != pasteboardAccessStatus { pasteboardAccessStatus = pasteboard }
+        refreshUpdaterState()
         guard full else { return }
         let login = actions.launchAtLoginEnabled()
         if login != launchAtLogin { launchAtLogin = login }
@@ -505,6 +533,46 @@ final class SettingsModel: ObservableObject {
 
     func addIgnoredApp(bundleID: String) { update { $0.ignoredApps = $0.ignoredApps + [bundleID] } }
     func removeIgnoredApp(_ id: String) { update { $0.ignoredApps = $0.ignoredApps.filter { $0 != id } } }
+
+    func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
+        chooseAutomaticUpdates(enabled)
+    }
+
+    func chooseAutomaticUpdates(_ enabled: Bool) {
+        guard updatesConfigured, let updater else { return }
+        update { $0.updateChoiceMade = true }
+        updater.automaticallyChecksForUpdates = enabled
+        refreshUpdaterState()
+    }
+
+    func checkForUpdates() {
+        guard updatesConfigured, canCheckForUpdates else { return }
+        updater?.checkForUpdates()
+        refreshUpdaterState()
+    }
+
+    func performAlertAction(_ action: SettingsAlert.Action) {
+        switch action {
+        case .openAccessibility: actions.openAccessibility()
+        case .installUpdate: checkForUpdates()
+        }
+    }
+
+    private func refreshUpdaterState() {
+        let configured = updater?.isConfigured ?? false
+        if configured, !prefs.updateChoiceMade, updater?.automaticallyChecksForUpdates == true {
+            updater?.automaticallyChecksForUpdates = false
+        }
+        if updatesConfigured != configured { updatesConfigured = configured }
+        let canCheck = configured && (updater?.canCheckForUpdates ?? false)
+        if canCheckForUpdates != canCheck { canCheckForUpdates = canCheck }
+        let automatic = configured && (updater?.automaticallyChecksForUpdates ?? false)
+        if automaticallyChecksForUpdates != automatic { automaticallyChecksForUpdates = automatic }
+        var inputs = lastAlertInputs
+        inputs.availableUpdate = configured ? updater?.availableUpdate : nil
+        let updatedAlerts = SettingsAlerts.compute(inputs)
+        if updatedAlerts != alerts { alerts = updatedAlerts }
+    }
 }
 
 // MARK: - Window
@@ -516,16 +584,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private(set) var window: NSWindow?
     private var keyMonitor: Any?
     private var refreshTimer: Timer?
-    private var previousApp: NSRunningApplication?
-    private var activationObserver: Any?
     private var themeBag: AnyCancellable?
+    private let activation: AppActivationCoordinator
     var willShow: () -> Void = {}
     var refresh: () -> Void = {}
 
-    init(model: SettingsModel, themes: ThemeStore, window: NSWindow? = nil) {
+    convenience init(model: SettingsModel, themes: ThemeStore, window: NSWindow? = nil) {
+        self.init(model: model, themes: themes, window: window, activation: AppActivationCoordinator())
+    }
+
+    init(model: SettingsModel, themes: ThemeStore, window: NSWindow? = nil,
+         activation: AppActivationCoordinator) {
         self.model = model
         self.themes = themes
         self.window = window
+        self.activation = activation
         super.init()
         themeBag = themes.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
@@ -542,29 +615,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if let section { model.section = section }
         let w = window ?? makeWindow()
         window = w
-        if !isOpen {
-            let front = NSWorkspace.shared.frontmostApplication
-            if front?.processIdentifier != ProcessInfo.processInfo.processIdentifier { previousApp = front }
-        }
         refresh()
         // A regular app only while Settings is open: Dock icon, menu bar (Edit menu for the text fields,
         // Cmd-W, Cmd-Q) and real activation so the window takes the keyboard.
-        NSApp.setActivationPolicy(.regular)
-        NSApp.mainMenu = Self.makeMainMenu()
-        NSApp.activate(ignoringOtherApps: true)
+        activation.beginSettings()
         w.makeKeyAndOrderFront(nil)
         installKeyMonitor()
-        // Track the app the user was most recently in while Settings is open, so closing returns there
-        // (not to whichever app was in front when Settings first opened).
-        if activationObserver == nil {
-            activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-                forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
-                let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                MainActor.assumeIsolated {
-                    if let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier { self?.previousApp = app }
-                }
-            }
-        }
         if refreshTimer == nil {
             let t = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refresh() }
@@ -586,16 +642,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         refreshTimer?.invalidate(); refreshTimer = nil
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
-        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
-        activationObserver = nil
-        NSApp.setActivationPolicy(.accessory)
-        // Hand the screen back to the app you were in. Never NSApp.hide(): that would also hide the strip and
-        // the stack bar panels.
-        let prev = previousApp
-        previousApp = nil
-        DispatchQueue.main.async {
-            if let prev, !prev.isTerminated { prev.activate() }
-        }
+        // The shared coordinator returns to accessory mode only when neither Settings nor Sparkle has UI open.
+        activation.endSettings()
     }
 
     private func makeWindow() -> NSWindow {
@@ -675,10 +723,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let name = model.section.rawValue
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                 guard let v = self?.window?.contentView,
-                      let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
-                v.cacheDisplay(in: v.bounds, to: rep)
-                try? rep.representation(using: .png, properties: [:])?
-                    .write(to: dir.appendingPathComponent("settings-\(name).png"))
+                      let png = DebugSnapshot.png(of: v) else { return }
+                try? png.write(to: dir.appendingPathComponent("settings-\(name).png"))
                 NSLog("ShakeBoard debug: settings snapshot \(name) written")
                 next()
             }
@@ -700,6 +746,9 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(model.section.title).font(.system(size: 20, weight: .semibold))
+                    if model.section == .general, model.shouldShowUpdateChoice {
+                        UpdateChoiceBanner(model: model)
+                    }
                     if model.section == .general, model.prefs.showRenameWelcome {
                         RenameWelcomeBanner(model: model)
                     }
@@ -725,7 +774,7 @@ struct SettingsView: View {
                         Image(systemName: s.symbol).frame(width: 18)
                         Text(s.title)
                         Spacer(minLength: 4)
-                        if model.alerts(in: s).contains(where: { $0.severity == .failure }) {
+                        if model.alerts(in: s).contains(where: { $0.severity.needsAttention }) {
                             Circle().fill(Color.orange).frame(width: 7, height: 7)
                                 .accessibilityLabel("Needs attention")
                         }
@@ -806,17 +855,44 @@ private struct RenameWelcomeBanner: View {
     }
 }
 
+private struct UpdateChoiceBanner: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Check for ShakeBoard updates automatically?")
+                .font(.system(size: 13, weight: .semibold))
+            Text("ShakeBoard only contacts the update feed — nothing else is sent.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Not Now") { model.chooseAutomaticUpdates(false) }
+                Button("Turn On") { model.chooseAutomaticUpdates(true) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.10)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor.opacity(0.35)))
+    }
+}
+
 private struct AlertRow: View {
     let alert: SettingsAlert
     @ObservedObject var model: SettingsModel
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: alert.severity == .failure ? "exclamationmark.triangle.fill" : "pause.circle.fill")
+            Image(systemName: alertIcon)
                 .foregroundStyle(alert.severity == .failure ? Color.orange : Color.secondary)
             Text(alert.text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            if alert.action == .openAccessibility {
-                Button("Open Accessibility Settings") { model.actions.openAccessibility() }.controlSize(.small)
+            if let action = alert.action {
+                Button(action == .installUpdate ? "Install\u{2026}" : "Open Accessibility Settings") {
+                    model.performAlertAction(action)
+                }
+                .controlSize(.small)
             }
         }
         .padding(10)
@@ -824,6 +900,14 @@ private struct AlertRow: View {
             .fill((alert.severity == .failure ? Color.orange : Color.secondary).opacity(0.10)))
         .overlay(RoundedRectangle(cornerRadius: 8)
             .strokeBorder((alert.severity == .failure ? Color.orange : Color.secondary).opacity(0.35)))
+    }
+
+    private var alertIcon: String {
+        switch alert.severity {
+        case .failure: return "exclamationmark.triangle.fill"
+        case .notice: return "pause.circle.fill"
+        case .attentionNotice: return "arrow.down.circle.fill"
+        }
     }
 }
 
@@ -877,6 +961,20 @@ private struct GeneralPane: View {
             }
             Hint("ShakeBoard needs Accessibility to notice a shake and to paste into the app you were using.")
         }
+        SettingsGroup(title: "Updates") {
+            Toggle("Automatically check for updates", isOn: Binding(
+                get: { model.automaticallyChecksForUpdates },
+                set: { model.setAutomaticallyChecksForUpdates($0) }
+            ))
+            Button("Check for Updates\u{2026}") { model.checkForUpdates() }
+                .disabled(!model.canCheckForUpdates)
+            Text("Current version \(AboutPane.version)")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+            if !model.updatesConfigured {
+                Hint("Updates aren't configured in this build.")
+            }
+        }
+        .disabled(!model.updatesConfigured)
     }
 }
 

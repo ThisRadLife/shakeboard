@@ -22,12 +22,12 @@ Does it reproduce after quitting and relaunching ShakeBoard?
 
 ## Environment
 
-- macOS version and build (for example, 15.1 / 26A5388g):
+- macOS version and build (for example, 26.1 / 25B78):
 - Mac model (Apple Silicon or Intel):
 - ShakeBoard version:
-- Installed from Release DMG, Homebrew, or built from source:
+- Installed from Release DMG or built from source:
 - Is Accessibility permission granted to ShakeBoard?
 
 ## Crash log
 
-If ShakeBoard crashed, paste or attach the crash log here. Remove personal information before posting.
+If ShakeBoard crashed, attach the crash log here. Remove personal information, real clipboard contents, credentials, tokens, and personal file paths before posting. Use synthetic examples where possible.

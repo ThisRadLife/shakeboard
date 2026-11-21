@@ -1,6 +1,6 @@
 # Privacy
 
-ShakeBoard is a local-only macOS app. It has no accounts, analytics, telemetry, advertising, or crash-reporting SDKs.
+ShakeBoard is a local-first macOS app. It has no accounts, analytics, telemetry, advertising, or crash-reporting SDKs.
 
 ## Data stored on this Mac
 
@@ -38,11 +38,23 @@ served, and shelf names are excluded unless explicitly enabled.
 
 ## Network access
 
-ShakeBoard makes no network requests today.
+Update checks are ShakeBoard's only network access. Automatic checks are off by default. The next time Settings opens,
+ShakeBoard asks once at the top of Settings > General whether to turn them on. Choosing **Not Now** keeps them off, and
+the **Automatically check for updates** toggle remains available in the Updates section. ShakeBoard suppresses
+Sparkle's separate permission window so an opt-in question cannot be missed behind another app. You can always run a
+manual check from Settings > General.
 
-A future Sparkle update check is planned to fetch an HTTPS appcast from GitHub. It will be the app's only automatic
-network request and automatic checks will require opt-in. Future backup or sync will also be opt-in and end-to-end
-encrypted so the service cannot read stored content.
+An update check makes a standard HTTPS request to
+`https://thisradlife.github.io/shakeboard/appcast.xml`. If an update is accepted, Sparkle downloads the signed DMG over
+HTTPS from the ShakeBoard GitHub release. The DMG's EdDSA signature from the appcast is verified before the update is
+installed.
+System profiling is disabled: ShakeBoard does not send hardware, operating-system, language, or other profile fields.
+Beyond the ordinary HTTP request metadata, the request includes only a User-Agent identifying ShakeBoard and its
+version. There are no accounts, analytics identifiers, clipboard contents, file names, or other app data in the
+request.
+
+No other networking may be added without updating this policy. Any future backup or sync design remains separate and
+would need to be opt-in and end-to-end encrypted so the service cannot read stored content.
 
 ## Delete your data
 

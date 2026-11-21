@@ -85,7 +85,44 @@ jobs:
             "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" "$LOGIN_KEYCHAIN"
 
-      - name: Build, notarize, and package
+      - name: Build release app
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/shakeboard-release.keychain-db"
+          xcodebuild \
+            -workspace ShakeBoard.xcworkspace \
+            -scheme ShakeBoard \
+            -configuration Release \
+            -derivedDataPath /tmp/shakeboard-release \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH --timestamp" \
+            build
+
+      - name: Verify Sparkle release configuration
+        run: |
+          set -euo pipefail
+          APP_INFO="/tmp/shakeboard-release/Build/Products/Release/ShakeBoard.app/Contents/Info.plist"
+          SPARKLE_PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP_INFO" 2>/dev/null || true)"
+          if [[ -z "$SPARKLE_PUBLIC_KEY" || "$SPARKLE_PUBLIC_KEY" == "UNSET_SPARKLE_PUBLIC_ED_KEY" ]]; then
+            echo "Built app has no usable SUPublicEDKey" >&2
+            exit 1
+          fi
+          PUBLIC_KEY_BYTES="$(mktemp "$RUNNER_TEMP/shakeboard-sparkle-public-key.XXXXXX")"
+          if ! printf '%s' "$SPARKLE_PUBLIC_KEY" | /usr/bin/base64 -D > "$PUBLIC_KEY_BYTES" 2>/dev/null; then
+            echo "Built app SUPublicEDKey is not valid base64" >&2
+            exit 1
+          fi
+          if [[ "$(wc -c < "$PUBLIC_KEY_BYTES" | tr -d ' ')" != "32" ]]; then
+            echo "Built app SUPublicEDKey must decode to 32 bytes" >&2
+            exit 1
+          fi
+          rm -f "$PUBLIC_KEY_BYTES"
+          SYSTEM_PROFILING="$(/usr/libexec/PlistBuddy -c 'Print :SUEnableSystemProfiling' "$APP_INFO" 2>/dev/null || true)"
+          if [[ "$SYSTEM_PROFILING" != "false" ]]; then
+            echo "Built app must set SUEnableSystemProfiling to false (found: ${SYSTEM_PROFILING:-missing})" >&2
+            exit 1
+          fi
+
+      - name: Verify, notarize, and package
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -101,14 +138,6 @@ jobs:
           SHA_NAME="$DMG_NAME.sha256"
           DMG_PATH="$GITHUB_WORKSPACE/$DMG_NAME"
           DMG_ROOT="$(mktemp -d "$RUNNER_TEMP/shakeboard-dmg.XXXXXX")"
-
-          xcodebuild \
-            -workspace ShakeBoard.xcworkspace \
-            -scheme ShakeBoard \
-            -configuration Release \
-            -derivedDataPath /tmp/shakeboard-release \
-            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH --timestamp" \
-            build
 
           APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")"
           if [[ "$APP_VERSION" != "$VERSION" ]]; then
@@ -128,16 +157,35 @@ jobs:
             echo "Missing share extension: $SHARE_APPEX" >&2
             exit 1
           fi
-          SIGNED_PATHS=(
-            "$APP_PATH"
-            "$APP_PATH/Contents/MacOS/shakeboard-mcp"
-            "${APPEX_PATHS[@]}"
-          )
+          SIGNED_PATHS=("$APP_PATH")
+          MACHO_MANIFEST="$(mktemp "$RUNNER_TEMP/shakeboard-machos.XXXXXX")"
+          find "$APP_PATH" -type f -print0 > "$MACHO_MANIFEST"
+          while IFS= read -r -d '' CANDIDATE; do
+            FILE_DESCRIPTION="$(file -b "$CANDIDATE")"
+            if grep -q 'Mach-O' <<< "$FILE_DESCRIPTION"; then
+              SIGNED_PATHS+=("$CANDIDATE")
+            fi
+          done < "$MACHO_MANIFEST"
+          BUNDLE_MANIFEST="$(mktemp "$RUNNER_TEMP/shakeboard-bundles.XXXXXX")"
+          find "$APP_PATH" -mindepth 1 -type d \( \
+            -name '*.app' -o \
+            -name '*.appex' -o \
+            -name '*.xpc' -o \
+            -name '*.framework' \
+          \) -print0 > "$BUNDLE_MANIFEST"
+          while IFS= read -r -d '' NESTED_BUNDLE; do
+            SIGNED_PATHS+=("$NESTED_BUNDLE")
+          done < "$BUNDLE_MANIFEST"
           for SIGNED_PATH in "${SIGNED_PATHS[@]}"; do
             SIGNATURE_DETAILS="$(codesign -dvv "$SIGNED_PATH" 2>&1)"
             TIMESTAMP_LINE="$(grep '^Timestamp=' <<< "$SIGNATURE_DETAILS" || true)"
             if [[ -z "$TIMESTAMP_LINE" ]]; then
               echo "Missing secure timestamp: $SIGNED_PATH" >&2
+              exit 1
+            fi
+            TEAM_IDENTIFIER_LINE="$(grep '^TeamIdentifier=' <<< "$SIGNATURE_DETAILS" || true)"
+            if [[ "$TEAM_IDENTIFIER_LINE" != "TeamIdentifier=$EXPECTED_TEAM_ID" ]]; then
+              echo "Unexpected signing team for $SIGNED_PATH: ${TEAM_IDENTIFIER_LINE:-missing (possibly ad-hoc)}" >&2
               exit 1
             fi
             echo "Secure timestamp for $SIGNED_PATH:"
@@ -151,9 +199,8 @@ jobs:
             fi
             if [[ -s "$ENTITLEMENTS_PLIST" ]]; then
               plutil -lint "$ENTITLEMENTS_PLIST"
-              if GET_TASK_ALLOW="$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$ENTITLEMENTS_PLIST" 2>/dev/null)" \
-                && [[ "$GET_TASK_ALLOW" == "true" ]]; then
-                echo "Release binary contains get-task-allow: $SIGNED_PATH" >&2
+              if GET_TASK_ALLOW="$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$ENTITLEMENTS_PLIST" 2>/dev/null)"; then
+                echo "Release binary contains get-task-allow ($GET_TASK_ALLOW): $SIGNED_PATH" >&2
                 exit 1
               fi
             fi
@@ -164,8 +211,11 @@ jobs:
                 exit 1
               fi
             fi
+            # Sparkle's nested helpers carry upstream entitlements. They are allowed as long as
+            # they are signed with a secure timestamp and do not contain get-task-allow.
             rm -f "$ENTITLEMENTS_PLIST"
           done
+          rm -f "$MACHO_MANIFEST" "$BUNDLE_MANIFEST"
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -F "TeamIdentifier=$EXPECTED_TEAM_ID"
 
           ditto -c -k --keepParent "$APP_PATH" "$APP_ZIP"

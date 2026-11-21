@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 ShakeBoard is a local macOS **drag-shelf** (a homegrown Yoink replacement): a floating agent app (no Dock or menu-bar icon)
-that parks files mid-drag so you can drag them back out later. Local only, no networking (the MCP helper talks to the app over a local Unix socket). Three
+that parks files mid-drag so you can drag them back out later. It is local-first; its only network path is the optional
+Sparkle update flow (the MCP helper talks to the app over a local Unix socket). Three
 targets (app, Share Extension, `shakeboard-mcp` helper) plus a unit-test target. One full-width **strip** at the bottom of the screen holds shelf files,
 pinned and recent copies (and the stack lane while it's open); the stack bar under the
 menu bar only shows while the strip is hidden. See `README.md` for the user-facing feature list and
@@ -32,6 +33,24 @@ in `Project.swift` because Tuist's per-target default (`-`) otherwise wins and a
 `xcodebuild` silently signs ad-hoc. Release also disables Xcode's base-entitlement injection so
 `get-task-allow` cannot enter notarized binaries; Debug keeps the injected debugging entitlement.
 CI builds with `CODE_SIGNING_ALLOWED=NO`.
+
+## Updates (Sparkle)
+
+`Sources/ShakeBoard/Updates.swift` owns `UpdateController`. Automatic checks are off by default. The next time a
+configured build opens Settings > General, ShakeBoard asks once in its own UI whether to turn them on; Sparkle's
+permission window is suppressed because it can be missed behind other apps in this `LSUIElement` app. The same pane
+keeps the automatic-check toggle and manual check button. The appcast check and accepted GitHub release download are
+ShakeBoard's only network path. Do not add any other networking without updating `docs/PRIVACY.md`.
+
+The Sparkle EdDSA private key lives only in the maintainer's login Keychain and must never enter CI, GitHub secrets,
+source control, logs, or command-line/environment arguments. CI creates a reviewed draft release and SHA-256 file;
+after it is published, the maintainer runs `scripts/publish-appcast.sh vX.Y.Z` to sign the DMG update locally and
+publish `appcast.xml` to `gh-pages`. Signed Release builds fail while `SPARKLE_PUBLIC_ED_KEY` is the placeholder; unsigned builds with `CODE_SIGNING_ALLOWED=NO` skip that guard. For local
+install testing only, `SHAKEBOARD_ALLOW_UNSET_SPARKLE_KEY=1` bypasses that guard; never set it in release CI.
+The Release key guard skips unsigned builds (`CODE_SIGNING_ALLOWED=NO`, e.g. CI) and debug; signed Release builds require the real `SUPublicEDKey` (`SHAKEBOARD_ALLOW_UNSET_SPARKLE_KEY=1` only for local non-shipping builds); `release.yml` independently validates the key.
+The app dependency is pinned to Sparkle 2.10.1's immutable revision in `Project.swift`; do not loosen it to a mutable
+version tag.
+Release builds remove Sparkle's unused XPC services (the app is non-sandboxed) and re-sign its nested helpers with the Developer ID identity before Xcode seals the app.
 
 - **Never build into a DerivedData path inside iCloud Drive.** `codesign`
   chokes on iCloud's extended attributes — always use `/tmp` or another non-iCloud path.

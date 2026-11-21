@@ -1,33 +1,41 @@
-# Sparkle 2 Plan
+# Sparkle 2 Implementation
 
-This is the plan for the next pull request. The public release preparation does not add update behavior.
+Status: implemented with Sparkle 2.10.1. The app integration, release checks, local appcast publisher, privacy
+documentation, and Homebrew metadata are in place. A real public EdDSA key and a published `gh-pages` feed are still
+release-operator setup; the EdDSA private key remains in the maintainer's login Keychain and never enters CI or GitHub
+secrets.
 
 ## Dependency and app configuration
 
-- Add Sparkle 2 through Swift Package Manager and pin an exact reviewed version in `Project.swift`.
-- Generate an EdDSA key pair with Sparkle's `generate_keys` tool.
+- Sparkle 2.10.1 is pinned to its immutable Git revision through Swift Package Manager in `Project.swift`.
+- Generate the EdDSA key pair once with Sparkle's `generate_keys` tool as documented in `RELEASING.md`.
 - Keep the private EdDSA key offline. Do not store it in GitHub Actions, repository secrets, source control, or the
   app bundle.
-- Add `SUPublicEDKey` and `SUFeedURL` to the app's Info.plist configuration. Host `appcast.xml` on GitHub Pages over
-  HTTPS.
-- Disable system profiling so update requests do not include device or OS profile fields beyond what HTTP requires.
+- `SUPublicEDKey` and `SUFeedURL` are set through the app's build settings. The feed URL is
+  `https://thisradlife.github.io/shakeboard/appcast.xml` until Brad selects a custom domain.
+- `SUEnableSystemProfiling` is false. Release CI rejects an unset public key or enabled profiling.
+- Local non-shipping Release builds may explicitly set `SHAKEBOARD_ALLOW_UNSET_SPARKLE_KEY=1`; Sparkle stays dormant
+  in those builds. Debug builds do not need the override.
 
 ## User experience
 
-- On first launch, ask whether the user wants automatic update checks. Do not enable them before opt-in.
-- Add **Check for Updates** under Settings > General for a user-initiated check.
-- Keep update errors actionable without making the app unreachable or interrupting clipboard work.
+- Automatic checks are off by default. ShakeBoard asks once at the top of Settings > General; Sparkle's separate
+  permission window is suppressed so it cannot be missed behind another app.
+- Settings > General includes **Automatically check for updates** and **Check for Updates...**.
+- Scheduled checks only show Sparkle when immediate focus is appropriate. Otherwise an informational update row and
+  the strip gear's orange dot wait for the user to choose **Install...**.
 
 ## Privacy promise
 
-The Sparkle appcast check will be ShakeBoard's only network call. Document the appcast URL, opt-in behavior, and data sent
-in `docs/PRIVACY.md`. Future sync remains separate, optional, and end-to-end encrypted.
+The Sparkle appcast check is ShakeBoard's only network call. `docs/PRIVACY.md` documents the appcast host, GitHub
+release download, opt-in behavior, signature verification, and the standard HTTP request data. Future networking may
+not be added without updating that policy.
 
 ## Release integration
 
-- Run Sparkle's `sign_update` locally against the final notarized DMG, or add a separate protected manual signing
-  step that receives the offline signature. The EdDSA private key must never enter the normal CI release job.
-- Add the EdDSA signature and file length to `appcast.xml` with the release notes and minimum macOS version.
-- Publish the appcast update only after the GitHub draft release is reviewed and published.
-- Extend `.github/workflows/release.yml` to preserve the notarized DMG as the single signed artifact, prepare appcast
-  metadata, and upload the reviewed `appcast.xml` to GitHub Pages without exposing the EdDSA private key.
+- CI builds, signs, notarizes, and staples the DMG, checks every nested Mach-O and signed bundle, then creates a draft
+  release containing the DMG and its SHA-256 file. CI does not contain the Sparkle private key and does not sign or
+  publish an appcast.
+- After a maintainer reviews and publishes the GitHub release, `scripts/publish-appcast.sh vX.Y.Z` verifies the DMG,
+  invokes Sparkle's pinned `sign_update` using the login-Keychain key, prepends the release to `appcast.xml`, prints the
+  diff, and publishes only to `gh-pages` after confirmation.

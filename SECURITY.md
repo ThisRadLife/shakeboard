@@ -25,8 +25,9 @@ Security reports are welcome for:
   `validatedHandoffDir` and `ingestHandoff` constrain accepted directories and files.
 - The MCP bridge: the embedded `shakeboard-mcp` helper, its owner-only local Unix socket, client consent, output redaction,
   and content-free audit log.
-- The planned Sparkle update channel.
+- The Sparkle updater and appcast, including update-signature validation and distribution integrity.
+- Compromise or misuse of the Sparkle EdDSA signing key, release-signing credentials, or appcast publishing path.
 - The planned opt-in encrypted backup and sync vault.
 
 Reports about weakening handoff validation, bypassing MCP consent or redaction, exposing clipboard data, replacing a
-trusted local peer, or compromising future update or vault integrity are especially valuable.
+trusted local peer, or compromising updater, appcast, signing-key, or future vault integrity are especially valuable.
